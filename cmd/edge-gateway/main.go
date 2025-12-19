@@ -19,13 +19,29 @@ func main() {
 	r := wazero.NewRuntime(ctx)
 	defer r.Close(ctx)
 
-	wasmPath := "../../modules/scloud-eg-waf/target/wasm32-wasip1/release/scloud_eg_waf.wasm"
-	wasmBytes, err := os.ReadFile(wasmPath)
+	WafWasmPath := "./modules/scloud-eg-waf/target/wasm32-wasip1/release/scloud_eg_waf.wasm"
+	RateLimitWasmPath := "./modules/scloud-eg-rate-limit/target/wasm32-wasip1/release/scloud_eg_rate_limit.wasm"
+
+	//========================
+	// WASM files bytes
+	//========================
+	WafWasmBytes, err := os.ReadFile(WafWasmPath)
+	if err != nil {
+		log.Fatalf("Failed to read WASM file: %v", err)
+	}
+	RateLimitWasmBytes, err := os.ReadFile(RateLimitWasmPath)
 	if err != nil {
 		log.Fatalf("Failed to read WASM file: %v", err)
 	}
 
-	wasmModule, err := runtime.LoadWasmModule(ctx, r, wasmBytes)
+	//========================
+	// WASM files modules
+	//========================
+	WafWasmModule, err := runtime.LoadWasmModule(ctx, r, WafWasmBytes)
+	if err != nil {
+		log.Fatalf("Failed to load WASM module: %v", err)
+	}
+	RateLimitWasmModule, err := runtime.LoadWasmModule(ctx, r, RateLimitWasmBytes)
 	if err != nil {
 		log.Fatalf("Failed to load WASM module: %v", err)
 	}
@@ -37,7 +53,7 @@ func main() {
 		}
 		jsonData, _ := json.Marshal(requestData)
 
-		decision, err := runtime.CallWaf(ctx, wasmModule, jsonData)
+		decision, err := runtime.CallWaf(ctx, WafWasmModule, jsonData)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, "WAF error: %v", err)
@@ -50,6 +66,24 @@ func main() {
 		} else {
 			w.WriteHeader(http.StatusForbidden)
 			fmt.Fprintln(w, "Request blocked by WAF")
+		}
+	})
+
+	http.HandleFunc("/rate-limit", func(w http.ResponseWriter, req *http.Request) {
+
+		decision, err := runtime.CallRatelimit(ctx, RateLimitWasmModule)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintf(w, "WAF error: %v", err)
+			return
+		}
+
+		if decision == 1 {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintln(w, "RateLimit OK")
+		} else {
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprintln(w, "Request blocked by RateLimit")
 		}
 	})
 

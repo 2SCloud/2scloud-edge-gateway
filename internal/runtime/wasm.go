@@ -35,3 +35,17 @@ func CallWaf(ctx context.Context, module api.Module, _request []byte) (int64, er
 
 	return int64(results[0]), nil
 }
+
+func CallRatelimit(ctx context.Context, module api.Module) (int64, error) {
+	handle := module.ExportedFunction("handle")
+	if handle == nil {
+		return -1, fmt.Errorf("handle function not found in WASM module")
+	}
+
+	results, err := handle.Call(ctx)
+	if err != nil {
+		return -1, fmt.Errorf("failed to call WASM function: %w", err)
+	}
+
+	return int64(results[0]), nil
+}
